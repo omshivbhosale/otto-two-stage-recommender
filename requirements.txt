@@ -6,3 +6,6 @@ torch==2.15.0
 lightgbm==4.7.0
 scikit-learn
 pytest
+fastapi
+uvicorn
+httpx
