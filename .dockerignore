@@ -1,0 +1,9 @@
+.venv
+.git
+.idea
+data
+notebooks
+tests
+**/__pycache__
+.pytest_cache
+models/session_gru_weeks12.pt
