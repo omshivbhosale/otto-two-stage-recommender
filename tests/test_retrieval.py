@@ -45,3 +45,14 @@ def test_search_returns_real_items():
     for row in out:
         # every real item exactly once, never the padding item (-1 after the shift)
         assert sorted(row) == list(range(n_items))
+
+def test_encode_sessions_shape_and_norm():
+    from src.retrieval import encode_sessions
+
+    torch.manual_seed(0)
+    model = SessionGRU(5, dim=8)
+    seqs = np.array([[0, 1, 2], [3, 4, 5], [0, 0, 1]], dtype=np.int32)
+    vecs = encode_sessions(model, seqs, batch=2)
+
+    assert vecs.shape == (3, 8)
+    assert np.allclose(np.linalg.norm(vecs, axis=1), 1.0, atol=1e-5)

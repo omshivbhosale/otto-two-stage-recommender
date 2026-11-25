@@ -1,4 +1,4 @@
-"""Turn sessions into GRU inputs and search for the closest items."""
+"""Turn sessions into GRU inputs, encode them, and search for the closest items."""
 import time
 
 import numpy as np
@@ -34,6 +34,19 @@ def build_sequences(events: pd.DataFrame, seq_len: int = SEQ_LEN) -> tuple[np.nd
 
 
 @torch.no_grad()
+def encode_sessions(
+    model: SessionGRU, seqs: np.ndarray, batch: int = 4096, device: torch.device | str = "cpu"
+) -> np.ndarray:
+    """One normalized 64-number vector per sequence."""
+    model.eval()
+    out = [
+        model.encode(torch.from_numpy(seqs[i:i + batch]).to(device)).cpu().numpy()
+        for i in range(0, len(seqs), batch)
+    ]
+    return np.concatenate(out).astype(np.float32)
+
+
+@torch.no_grad()
 def search(
     model: SessionGRU,
     seqs: np.ndarray,
@@ -41,15 +54,18 @@ def search(
     batch: int = 256,
     device: torch.device | str = "cpu",
     log_every: int = 500,
-) -> np.ndarray:
+    return_scores: bool = False,
+):
     """Top-k closest items per sequence, as original item IDs.
 
     Scores on `device`, picks the top k on the CPU (much faster than
-    top-k on the Mac GPU for 1.8M items).
+    top-k on the Mac GPU for 1.8M items). With return_scores=True,
+    also returns the similarity of each found item.
     """
     model.eval()
     item_vecs = model.item_vectors()
-    out = np.zeros((len(seqs), k), dtype=np.int32)
+    ids = np.zeros((len(seqs), k), dtype=np.int32)
+    sims = np.zeros((len(seqs), k), dtype=np.float32)
     n_batches = (len(seqs) + batch - 1) // batch
     start = time.time()
 
@@ -57,9 +73,12 @@ def search(
         sv = model.encode(torch.from_numpy(seqs[i:i + batch]).to(device))
         scores = (sv @ item_vecs.T).cpu()
         scores[:, 0] = -float("inf")  # never recommend padding
-        out[i:i + batch] = scores.topk(k).indices.numpy() - 1
+        top = scores.topk(k)
+        ids[i:i + batch] = top.indices.numpy() - 1
+        sims[i:i + batch] = top.values.numpy()
         if log_every and (b + 1) % log_every == 0:
             elapsed = time.time() - start
             left = elapsed / (b + 1) * (n_batches - b - 1)
             print(f"batch {b + 1}/{n_batches} | {elapsed / 60:.1f} min | ~{left / 60:.0f} min left")
-    return out
+
+    return (ids, sims) if return_scores else ids
