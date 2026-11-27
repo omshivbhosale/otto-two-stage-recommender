@@ -1,0 +1,97 @@
+{
+  "version": "v2",
+  "features": [
+    "hist_rank",
+    "cov_score",
+    "cov_rank",
+    "pop_rank",
+    "n_clicks",
+    "n_carts",
+    "n_orders",
+    "sess_len",
+    "sess_items",
+    "item_clicks",
+    "item_carts",
+    "item_orders",
+    "secs_since",
+    "gru_rank",
+    "gru_sim",
+    "sim_all",
+    "clk_score",
+    "clk_rank"
+  ],
+  "targets": {
+    "clicks": {
+      "trees": 84,
+      "pool_recall_at_20": 0.954412739355509,
+      "gain_share": {
+        "secs_since": 0.6295,
+        "clk_rank": 0.1046,
+        "sess_items": 0.0869,
+        "hist_rank": 0.0652,
+        "n_clicks": 0.0233,
+        "sim_all": 0.0203,
+        "gru_rank": 0.0193,
+        "sess_len": 0.0175,
+        "clk_score": 0.0111,
+        "cov_score": 0.0096,
+        "gru_sim": 0.0067,
+        "item_clicks": 0.0034,
+        "cov_rank": 0.0014,
+        "item_carts": 0.0004,
+        "n_carts": 0.0003,
+        "pop_rank": 0.0003,
+        "item_orders": 0.0002,
+        "n_orders": 0.0
+      }
+    },
+    "carts": {
+      "trees": 202,
+      "pool_recall_at_20": 0.9448155993699419,
+      "gain_share": {
+        "hist_rank": 0.5563,
+        "secs_since": 0.2774,
+        "n_carts": 0.0459,
+        "clk_rank": 0.0247,
+        "sess_len": 0.0157,
+        "sim_all": 0.0147,
+        "cov_rank": 0.012,
+        "gru_sim": 0.009,
+        "clk_score": 0.0078,
+        "cov_score": 0.0073,
+        "gru_rank": 0.0067,
+        "item_carts": 0.0061,
+        "n_clicks": 0.0049,
+        "item_clicks": 0.0046,
+        "sess_items": 0.0034,
+        "item_orders": 0.0015,
+        "n_orders": 0.0013,
+        "pop_rank": 0.0007
+      }
+    },
+    "orders": {
+      "trees": 170,
+      "pool_recall_at_20": 0.966652415562206,
+      "gain_share": {
+        "secs_since": 0.8296,
+        "n_carts": 0.0413,
+        "sess_len": 0.0189,
+        "cov_rank": 0.0155,
+        "clk_rank": 0.0147,
+        "hist_rank": 0.0141,
+        "sim_all": 0.0115,
+        "item_orders": 0.0091,
+        "gru_rank": 0.006,
+        "cov_score": 0.0056,
+        "n_orders": 0.0053,
+        "item_clicks": 0.0052,
+        "sess_items": 0.0049,
+        "item_carts": 0.0049,
+        "n_clicks": 0.0048,
+        "clk_score": 0.0047,
+        "gru_sim": 0.0038,
+        "pop_rank": 0.0
+      }
+    }
+  }
+}
