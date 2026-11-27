@@ -1,0 +1,17 @@
+{
+  "events": 216716096,
+  "test_cutoff": 1661119200,
+  "rank_cutoff": 1660514400,
+  "test_week": {
+    "sessions": 1801251,
+    "with_click": 1755489,
+    "with_carts": 306859,
+    "with_orders": 151078
+  },
+  "rank_week": {
+    "sessions": 2237925,
+    "with_click": 2173551,
+    "with_carts": 385933,
+    "with_orders": 196717
+  }
+}

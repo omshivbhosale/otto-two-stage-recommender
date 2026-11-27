@@ -1,0 +1,12 @@
+{
+  "week": "test",
+  "sequences": 9716693,
+  "batch": 1024,
+  "lr": 0.01,
+  "history": [
+    {
+      "epoch": 1,
+      "last_500_steps_loss": 4.833764129638672
+    }
+  ]
+}

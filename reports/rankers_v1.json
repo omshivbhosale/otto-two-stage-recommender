@@ -1,0 +1,89 @@
+{
+  "version": "v1",
+  "features": [
+    "hist_rank",
+    "cov_score",
+    "cov_rank",
+    "pop_rank",
+    "n_clicks",
+    "n_carts",
+    "n_orders",
+    "sess_len",
+    "sess_items",
+    "item_clicks",
+    "item_carts",
+    "item_orders",
+    "secs_since",
+    "gru_rank",
+    "gru_sim",
+    "sim_all"
+  ],
+  "targets": {
+    "clicks": {
+      "trees": 83,
+      "pool_recall_at_20": 0.9476317724492906,
+      "gain_share": {
+        "secs_since": 0.7018,
+        "sess_items": 0.0944,
+        "sim_all": 0.0517,
+        "gru_rank": 0.0437,
+        "sess_len": 0.0272,
+        "item_clicks": 0.0253,
+        "n_clicks": 0.0248,
+        "cov_rank": 0.0181,
+        "hist_rank": 0.0075,
+        "cov_score": 0.0026,
+        "gru_sim": 0.0015,
+        "item_carts": 0.0007,
+        "item_orders": 0.0003,
+        "pop_rank": 0.0002,
+        "n_carts": 0.0002,
+        "n_orders": 0.0
+      }
+    },
+    "carts": {
+      "trees": 172,
+      "pool_recall_at_20": 0.9507598453074786,
+      "gain_share": {
+        "hist_rank": 0.5701,
+        "secs_since": 0.2708,
+        "n_carts": 0.0464,
+        "cov_rank": 0.0297,
+        "sim_all": 0.0185,
+        "sess_len": 0.0179,
+        "gru_rank": 0.0138,
+        "item_carts": 0.0072,
+        "cov_score": 0.0061,
+        "n_clicks": 0.0045,
+        "sess_items": 0.0037,
+        "gru_sim": 0.0034,
+        "item_clicks": 0.0031,
+        "item_orders": 0.0018,
+        "n_orders": 0.0014,
+        "pop_rank": 0.0013
+      }
+    },
+    "orders": {
+      "trees": 192,
+      "pool_recall_at_20": 0.9686989422994239,
+      "gain_share": {
+        "secs_since": 0.8305,
+        "n_carts": 0.044,
+        "cov_rank": 0.0264,
+        "sess_len": 0.021,
+        "sim_all": 0.0133,
+        "hist_rank": 0.0103,
+        "item_orders": 0.0097,
+        "gru_sim": 0.0072,
+        "gru_rank": 0.0065,
+        "sess_items": 0.006,
+        "item_carts": 0.0056,
+        "n_clicks": 0.0054,
+        "n_orders": 0.0053,
+        "cov_score": 0.0045,
+        "item_clicks": 0.0042,
+        "pop_rank": 0.0002
+      }
+    }
+  }
+}
