@@ -1,0 +1,31 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # Spark needs Java
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: |
+          # CPU-only PyTorch: much smaller than the default GPU build
+          pip install --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest -q
