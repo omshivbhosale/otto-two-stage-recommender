@@ -67,3 +67,21 @@ def test_features_and_labels(spark):
     assert rows[2].y_click == 1               # next click was item 2
     assert rows[5].y_cart == 1                # item 5 was carted
     assert sum(r.y_order for r in rows.values()) == 0
+
+
+def test_candidates_include_viewed_together(spark):
+    train, inp, gru, labels = make_data(spark)
+    clicks_cv = spark.createDataFrame(
+        [(1, 7, 5, 1), (4, 8, 3, 1), (4, 7, 1, 2)],  # partners of history items 1 and 4
+        "aid_x int, aid_y int, count long, rank int",
+    )
+    cands = build_candidates(inp, train, CUT, gru=gru, clicks_cv=clicks_cv)
+    rows = {r.aid: r for r in cands.collect()}
+
+    assert sorted(rows) == [1, 2, 3, 4, 5, 7, 8]
+    assert rows[7].clk_score == 6 and rows[7].clk_rank == 1   # 5 (via item 1) + 1 (via item 4)
+    assert rows[8].clk_score == 3 and rows[8].clk_rank == 2
+    assert rows[1].clk_rank is None                            # not a viewed-together partner
+
+    df = add_labels(add_features(cands, inp, train, CUT), labels)
+    assert df.count() == 7                                     # no duplicated rows

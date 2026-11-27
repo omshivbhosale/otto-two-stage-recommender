@@ -8,12 +8,18 @@ COUNT_COLS = ["n_clicks", "n_carts", "n_orders", "item_clicks", "item_carts", "i
 
 
 def build_candidates(
-    inp: DataFrame, train_events: DataFrame, cut: int, gru: DataFrame | None = None
+    inp: DataFrame,
+    train_events: DataFrame,
+    cut: int,
+    gru: DataFrame | None = None,
+    clicks_cv: DataFrame | None = None,
 ) -> DataFrame:
     """One row per (session, aid) candidate, with a score column per source.
 
     Sources: session history (hist_rank), bought-together (cov_score, cov_rank),
-    popular items (pop_rank), and optionally GRU (gru_rank, gru_sim).
+    popular items (pop_rank), optionally GRU (gru_rank, gru_sim) and optionally
+    viewed-together partners of the history items (clk_score, clk_rank), from
+    a table built by src.baselines.build_covisit_clicks.
     """
     spark = inp.sparkSession
     hist = (
@@ -42,6 +48,16 @@ def build_candidates(
         .join(cov.select("session", "aid", "cov_score", "cov_rank"), ["session", "aid"], "full")
         .join(pop_c, ["session", "aid"], "full")
     )
+    if clicks_cv is not None:
+        clk = (
+            hist.join(clicks_cv, hist.aid == clicks_cv.aid_x)
+            .groupBy("session", F.col("aid_y").alias("aid"))
+            .agg(F.sum("count").alias("clk_score"))
+            .withColumn("clk_rank", F.row_number().over(
+                Window.partitionBy("session").orderBy(F.desc("clk_score"), "aid")))
+            .filter("clk_rank <= 20")
+        )
+        cands = cands.join(clk.select("session", "aid", "clk_score", "clk_rank"), ["session", "aid"], "full")
     if gru is not None:
         cands = cands.join(gru.select("session", "aid", "gru_rank", "gru_sim"), ["session", "aid"], "full")
     return cands

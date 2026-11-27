@@ -47,6 +47,49 @@ def build_covisit_buys(train: DataFrame, max_per_session: int = 30, top_k: int =
     )
 
 
+def build_covisit_clicks(
+    train: DataFrame,
+    cutoff: int,
+    days: int = 14,
+    max_per_session: int = 30,
+    window_secs: int = 24 * 3600,
+    top_k: int = 20,
+) -> DataFrame:
+    """For each item, its top_k partners viewed in the same session ("viewed together").
+
+    Uses events from the `days` before the cutoff (any type). Each session contributes
+    its `max_per_session` most recently touched items; two items form a pair when the
+    session touched them within `window_secs` of each other. A pair counts once per session.
+
+    Returns columns aid_x, aid_y, count, rank (same shape as build_covisit_buys).
+    """
+    start = cutoff - days * 24 * 3600
+    items = (
+        train.filter(F.col("ts") >= start)
+        .groupBy("session", "aid").agg(F.max("ts").alias("ts"))
+        .withColumn("rn", F.row_number().over(
+            Window.partitionBy("session").orderBy(F.desc("ts"), "aid")
+        ))
+        .filter(F.col("rn") <= max_per_session)
+        .select("session", "aid", "ts")
+    )
+    a, b = items.alias("a"), items.alias("b")
+    pairs = a.join(
+        b,
+        (F.col("a.session") == F.col("b.session"))
+        & (F.col("a.aid") != F.col("b.aid"))
+        & (F.abs(F.col("a.ts") - F.col("b.ts")) <= window_secs),
+    ).select(F.col("a.aid").alias("aid_x"), F.col("b.aid").alias("aid_y"))
+
+    return (
+        pairs.groupBy("aid_x", "aid_y").count()
+        .withColumn("rank", F.row_number().over(
+            Window.partitionBy("aid_x").orderBy(F.desc("count"), "aid_y")
+        ))
+        .filter(F.col("rank") <= top_k)
+    )
+
+
 def _ranked_list(df: DataFrame, order_col: str, name: str, k: int) -> DataFrame:
     """Turn (session, aid, score) rows into one array per session, best first."""
     return (

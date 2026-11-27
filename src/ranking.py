@@ -20,6 +20,12 @@ FEATURES = [
     "gru_rank", "gru_sim", "sim_all",
 ]
 
+# v1: the original system. v2: adds the viewed-together (click co-visitation) source.
+FEATURE_SETS = {
+    "v1": FEATURES,
+    "v2": FEATURES + ["clk_score", "clk_rank"],
+}
+
 
 def rank_within_session(d: pd.DataFrame, score_col: str) -> pd.Series:
     """Rank of each candidate inside its session: 1 = highest score, ties by row order."""
