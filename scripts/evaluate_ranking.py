@@ -100,7 +100,8 @@ def main() -> None:
     print(table.to_string())
 
     REPORTS.mkdir(exist_ok=True)
-    out = REPORTS / f"evaluation_{week}_week_{'_'.join(args.versions)}.json"
+    suffix = "" if args.final else f"_seed{args.seed}"
+    out = REPORTS / f"evaluation_{week}_week_{'_'.join(args.versions)}{suffix}.json"
     out.write_text(json.dumps(
         {"week": week, "sessions": int(len(labels)), "seed": None if args.final else args.seed, "results": rows},
         indent=2,

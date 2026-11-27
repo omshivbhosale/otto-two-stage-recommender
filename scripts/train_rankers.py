@@ -1,9 +1,12 @@
 """Train the click, cart and order rankers on the ranker week (LightGBM lambdarank).
 
-Uses the same 300K training sessions as the original rankers (80% to train,
-20% to stop early), so the sessions evaluate_ranking holds out stay unseen.
-
+  python -m scripts.train_rankers --version v1
   python -m scripts.train_rankers --version v2
+
+All versions train on the same 300K ranker-week sessions (80% to train, 20% to
+stop early), chosen once at random among sessions with at least one right answer
+in the v1 candidate pool. Every other ranker-week session is held out, so
+scripts.evaluate_ranking can compare versions on sessions no ranker has seen.
 """
 import argparse
 import json
@@ -12,8 +15,11 @@ import time
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+import pyarrow.dataset as ds
 
-from scripts._common import DATA, FEATURE_DIRS, REPORTS, add_sim_all, ranker_path, read_sessions, training_sessions
+from scripts._common import (
+    DATA, FEATURE_DIRS, REPORTS, TRAINING_SESSIONS, add_sim_all, ranker_path, read_sessions, training_sessions,
+)
 from src.ranking import FEATURE_SETS, TARGET_COLS
 
 PARAMS = dict(
@@ -36,12 +42,26 @@ def pool_recall(d: pd.DataFrame, score_col: str, y: str) -> float:
     return float(hits.reindex(pos.index, fill_value=0).sum() / np.minimum(pos, 20).sum())
 
 
+def choose_training_sessions(n: int = 300_000, seed: int = 1) -> None:
+    """Pick the training sessions once and save them; later runs reuse the same ones."""
+    if TRAINING_SESSIONS.exists():
+        return
+    cols = ["session", *TARGET_COLS.values()]
+    d = ds.dataset(DATA / FEATURE_DIRS[("v1", "rank")], format="parquet").to_table(columns=cols).to_pandas()
+    has_answer = d.groupby("session")[list(TARGET_COLS.values())].max().sum(axis=1) > 0
+    candidates = np.sort(has_answer[has_answer].index.to_numpy())
+    rng = np.random.default_rng(seed)
+    np.save(TRAINING_SESSIONS, np.sort(rng.choice(candidates, size=n, replace=False)))
+    print(f"chose {n:,} training sessions out of {len(candidates):,} with a right answer in the pool")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--version", choices=FEATURE_SETS, default="v2")
     args = parser.parse_args()
     start = time.time()
 
+    choose_training_sessions()
     features = FEATURE_SETS[args.version]
     raw = [f for f in features if f != "sim_all"]
     d = read_sessions(

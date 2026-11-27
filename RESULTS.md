@@ -13,30 +13,56 @@ using OTTO's weighting: score = 0.10 × clicks + 0.30 × carts + 0.60 × orders.
 - **Ranker training week:** the same procedure one week earlier (2.24M sessions),
   built only from data before the test week, so no test information leaks
   into training.
+- **Model selection:** every design choice was made on ranker-week sessions the
+  rankers never trained on (1.94M held out; scored on two random samples of 200K).
+  The test week was scored once, after the final system was chosen.
 - These scores are **not comparable to the Kaggle leaderboard**, which uses
   OTTO's hidden test set.
 
-## Main result
+## Main result (test week, 1,801,251 sessions)
 
 | System | Clicks | Carts | Orders | **Score** |
 |---|---|---|---|---|
 | Popular items only | 0.0053 | 0.0067 | 0.0060 | 0.0061 |
 | Session history + popular | 0.3259 | 0.3122 | 0.5736 | 0.4704 |
 | History + bought-together + popular | 0.4244 | 0.3831 | 0.6170 | 0.5276 |
-| **Two-stage: 4 candidate sources + LightGBM ranker** | **0.4727** | **0.4006** | **0.6285** | **0.5446** |
+| v1: two-stage, 4 sources, one blended list | 0.4727 | 0.4006 | 0.6285 | 0.5446 |
+| **v2: + viewed-together source, separate list per type** | **0.4964** | **0.4089** | **0.6332** | **0.5522** |
 
-The two-stage system improves the best baseline by **+0.017 (+3.2%)**,
-with gains on every event type.
+v2 improves the best baseline by **+0.025 (+4.7%)** and v1 by +0.008, with gains
+on every event type. Source: `reports/evaluation_test_week_v1_v2.json`.
 
-## How much room was there?
+## What changed from v1 to v2, one step at a time
 
-If a perfect ranker picked the best 20 items from the combined candidate
-pool (history, GRU, bought-together), the score would be **0.5717**.
-The ranker captured **about 40%** of the possible gain over the best
-baseline (+0.017 of +0.044). Most remaining misses are items that never
-reach the candidate pool, a limit of retrieval rather than ranking.
+| Test week | Clicks | Carts | Orders | Score |
+|---|---|---|---|---|
+| v1, one blended list | 0.4727 | 0.4006 | 0.6285 | 0.5446 |
+| v1, separate list per type | 0.4858 | 0.4013 | 0.6285 | 0.5461 |
+| v2, one blended list | 0.4957 | 0.4083 | 0.6330 | 0.5519 |
+| v2, separate list per type | 0.4964 | 0.4089 | 0.6332 | 0.5522 |
 
-## Ranker ablation (ranker training week, held-out 20% of sessions)
+1. **Separate lists per event type** (+0.0015 on v1). OTTO scores clicks, carts
+   and orders separately; merging three rankers into one list left little room for
+   click-only items. Almost all of the gain is on clicks.
+2. **Viewed-together candidates** (+0.006). For each item the shopper touched, add the
+   items other shoppers viewed within 24 hours of it (last 14 days before the cutoff).
+   This raises the pool from 74 to 83 candidates per session, and `clk_rank` becomes the
+   click ranker's second most important feature (10.5% of gain, after recency).
+
+The same order held on both held-out ranker-week samples before the test week was
+scored (score, seed 42 / seed 7): v1 blended 0.6086 / 0.6094, v1 separate 0.6102 / 0.6104,
+v2 blended 0.6164 / 0.6173, v2 separate 0.6165 / 0.6172.
+Ranker-week scores are higher than test-week scores and are only used to compare systems.
+
+## How much room was there? (v1)
+
+If a perfect ranker picked the best 20 items from the v1 candidate pool
+(history, GRU, bought-together), the score would be **0.5717**.
+The v1 ranker captured **about 40%** of the possible gain over the best
+baseline (+0.017 of +0.044). Most remaining misses were items that never
+reached the candidate pool, which is what motivated the v2 source.
+
+## v1 ranker ablation (ranker training week, held-out 20% of sessions)
 
 Share of the right answers in the candidate pool that land in the top 20:
 
@@ -49,7 +75,7 @@ Share of the right answers in the candidate pool that land in the top 20:
 The GRU features (`gru_rank`, `gru_sim`, `sim_all`) improve every target,
 most of all clicks.
 
-## What mattered most (LightGBM gain share)
+## What mattered most (v1, LightGBM gain share)
 
 | Feature | Clicks | Carts | Orders |
 |---|---|---|---|
@@ -60,8 +86,7 @@ most of all clicks.
 | `n_carts` (times the shopper carted the item) | 0.000 | 0.050 | 0.044 |
 
 Recency dominates: shoppers mostly act on items they just viewed.
-The GRU features carry less total weight but decide the hard cases,
-items the shopper has not seen yet.
+v2 gain shares are in `reports/rankers_v2.json`.
 
 ## Findings along the way
 
@@ -72,6 +97,8 @@ items the shopper has not seen yet.
 - **A ranker is only useful with diverse candidates.** Without GRU
   candidates (about 40 per session), a fixed order already caught about
   98.5% of the reachable answers, leaving the ranker almost nothing to fix.
+- **More candidates beat a better merge.** Separate lists per type gained +0.0015;
+  adding one candidate source gained about four times as much.
 - **Shrinking the item catalog for faster search did not work.** Almost
   every item had activity in the previous 2 weeks; halving the catalog
   would have made 7.6% of next clicks impossible to recommend.
@@ -81,9 +108,9 @@ items the shopper has not seen yet.
 
 ## Limitations
 
-- The three rankers (clicks, carts, orders) are merged into one 20-item
-  list with a simple weighted-rank blend; a tuned blend, or separate
-  lists per event type, could score higher.
+- The v2 click ranker stopped early (84 trees) and is the weakest of the three: on the
+  ranker week its own list scored lower on clicks than the blended list (0.5413 vs 0.5436,
+  seed 42), although on the test week it was slightly ahead (0.4964 vs 0.4957).
 - Rankers were trained on a 300K-session sample of the ranker week.
 - The GRU is small (64-dimensional, 1 epoch) and was still improving
   when training stopped.

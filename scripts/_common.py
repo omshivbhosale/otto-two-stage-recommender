@@ -12,6 +12,9 @@ MODELS = ROOT / "models"
 REPORTS = ROOT / "reports"
 ARTIFACTS = ROOT / "artifacts"
 
+N_ITEMS = 1_855_603  # OTTO item IDs run 0..1,855,602; the GRU shifts them by +1 so 0 can mean padding
+TRAINING_SESSIONS = DATA / "rank_training_sessions.npy"
+
 # Saved feature tables, per system version and week.
 FEATURE_DIRS = {
     ("v1", "rank"): "rank_features_gru",
@@ -28,8 +31,11 @@ def ranker_path(version: str, target_col: str) -> Path:
 
 
 def training_sessions() -> np.ndarray:
-    """The 300K ranker-week sessions the rankers are trained on (fixed since v1)."""
-    return np.sort(pd.read_parquet(DATA / "rank_sample_gru", columns=["session"])["session"].unique())
+    """The ranker-week sessions the rankers train on (chosen once by scripts.train_rankers).
+
+    Every other ranker-week session is held out for choosing between systems.
+    """
+    return np.load(TRAINING_SESSIONS)
 
 
 def read_sessions(path: Path, sessions: np.ndarray, columns: list[str]) -> pd.DataFrame:
