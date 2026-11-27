@@ -1,4 +1,4 @@
-"""FastAPI service: POST a session's events, get back recommended item IDs."""
+"""FastAPI service: POST a session's events, get back what the shopper may click, cart and order next."""
 import os
 import time
 from contextlib import asynccontextmanager
@@ -39,7 +39,9 @@ class RecommendRequest(BaseModel):
 
 
 class RecommendResponse(BaseModel):
-    items: list[int]
+    clicks: list[int] = Field(description="items the shopper may click next, best first")
+    carts: list[int] = Field(description="items the shopper may add to cart, best first")
+    orders: list[int] = Field(description="items the shopper may order, best first")
     latency_ms: float
 
 
@@ -51,5 +53,5 @@ def health() -> dict:
 @app.post("/recommend", response_model=RecommendResponse)
 def recommend(req: RecommendRequest) -> RecommendResponse:
     start = time.perf_counter()
-    items = state["rec"].recommend([e.model_dump() for e in req.events], k=req.k)
-    return RecommendResponse(items=items, latency_ms=round((time.perf_counter() - start) * 1000, 2))
+    lists = state["rec"].recommend([e.model_dump() for e in req.events], k=req.k)
+    return RecommendResponse(**lists, latency_ms=round((time.perf_counter() - start) * 1000, 2))

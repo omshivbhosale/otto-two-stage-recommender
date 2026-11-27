@@ -23,3 +23,7 @@ $PY -m scripts.evaluate_ranking --versions v1 v2 --seed 42
 $PY -m scripts.evaluate_ranking --versions v1 v2 --seed 7
 # ... then score the test week once
 $PY -m scripts.evaluate_ranking --versions v1 v2 --final
+
+# serving: export lookup tables for the API, then check it matches the pipeline
+$PY -m scripts.export_serving
+$PY -m scripts.check_serving

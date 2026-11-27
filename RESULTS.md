@@ -95,6 +95,22 @@ clicks, 7.8% carts and 2.4% orders; the top 1% of items get 38.2% of all events.
 
 Full shares for both versions: `reports/rankers_v1.json`, `reports/rankers_v2.json`.
 
+## Serving
+
+The API (`src/serve.py`) recomputes the v2 candidates and features for one session at a time in NumPy/pandas.
+`scripts/check_serving.py` sends 200 random test-week sessions through it and compares the results with the
+Spark pipeline's saved features, scored by the same rankers:
+
+| Check (200 sessions) | Result |
+|---|---|
+| Same candidate items | 200 / 200 |
+| Feature mismatches | 0 (GRU similarities agree to 6 decimal places) |
+| Same top 20 for clicks / carts / orders | 200 / 200 / 200 |
+| Latency, median / p95 | 14.8 ms / 15.4 ms |
+
+Source: `reports/serving_check.json`. The lookup tables the API loads are rebuilt from the pipeline's data by
+`scripts/export_serving.py`, with the same cutoff as the test week.
+
 ## Reproducibility
 
 `run_pipeline.sh` rebuilds every table, model and report from the raw data. A clean rerun
@@ -138,4 +154,4 @@ and are not rerun by the pipeline scripts.
   while on the test week it was slightly ahead (0.4968 vs 0.4964).
 - Rankers were trained on a 300K-session sample of the ranker week.
 - The GRU is small (64-dimensional, 1 epoch) and was still improving when training stopped.
-- The API in `src/serve.py` still runs v1 (one blended list); v2 serving is not built yet.
+- Latency was measured on an Apple M5 laptop, one session at a time, outside Docker.

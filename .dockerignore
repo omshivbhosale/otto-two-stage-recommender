@@ -4,6 +4,15 @@
 data
 notebooks
 tests
+reports
 **/__pycache__
 .pytest_cache
-models/session_gru_weeks12.pt
+# only the v2 serving files are copied into the image; keep the rest out of the build context
+models/*
+!models/gru_test.pt
+!models/ranker_v2_y_*.txt
+artifacts/*
+!artifacts/covisit_buys.npz
+!artifacts/covisit_clicks.npz
+!artifacts/item_pop.npy
+!artifacts/popular.npy

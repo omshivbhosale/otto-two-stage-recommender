@@ -13,8 +13,9 @@ COPY requirements-serve.txt .
 RUN pip install --no-cache-dir -r requirements-serve.txt
 
 COPY src/ src/
-COPY artifacts/ artifacts/
-COPY models/session_gru_epoch1.pt models/ranker_y_click.txt models/ranker_y_cart.txt models/ranker_y_order.txt models/
+# lookup tables and models written by scripts.export_serving and the pipeline (v2 system)
+COPY artifacts/covisit_buys.npz artifacts/covisit_clicks.npz artifacts/item_pop.npy artifacts/popular.npy artifacts/
+COPY models/gru_test.pt models/ranker_v2_y_click.txt models/ranker_v2_y_cart.txt models/ranker_v2_y_order.txt models/
 
 # one thread each for torch and lightgbm (see the note in src/serve.py)
 ENV OMP_NUM_THREADS=1

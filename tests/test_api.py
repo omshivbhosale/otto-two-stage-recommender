@@ -5,14 +5,14 @@ import src.api as api
 
 
 class FakeRecommender:
-    """Stands in for the real model: returns 0, 1, 2, ... and remembers its input."""
+    """Stands in for the real model: returns fixed lists and remembers its input."""
 
     def __init__(self, artifacts, models):
         self.last_events = None
 
     def recommend(self, events, k=20):
         self.last_events = events
-        return list(range(k))
+        return {"clicks": list(range(k)), "carts": list(range(k, 2 * k)), "orders": list(range(2 * k, 3 * k))}
 
 
 @pytest.fixture
@@ -31,11 +31,13 @@ def test_health(client):
     assert r.json() == {"status": "ok", "model_loaded": True}
 
 
-def test_recommend_returns_k_items(client):
-    r = client.post("/recommend", json={"events": [GOOD_EVENT], "k": 5})
+def test_recommend_returns_a_list_per_event_type(client):
+    r = client.post("/recommend", json={"events": [GOOD_EVENT], "k": 3})
     assert r.status_code == 200
     body = r.json()
-    assert body["items"] == [0, 1, 2, 3, 4]
+    assert body["clicks"] == [0, 1, 2]
+    assert body["carts"] == [3, 4, 5]
+    assert body["orders"] == [6, 7, 8]
     assert body["latency_ms"] >= 0
 
 
@@ -45,8 +47,8 @@ def test_events_reach_the_recommender(client):
 
 
 def test_default_k_is_20(client):
-    r = client.post("/recommend", json={"events": [GOOD_EVENT]})
-    assert len(r.json()["items"]) == 20
+    body = client.post("/recommend", json={"events": [GOOD_EVENT]}).json()
+    assert len(body["clicks"]) == len(body["carts"]) == len(body["orders"]) == 20
 
 
 def test_empty_session_is_allowed(client):

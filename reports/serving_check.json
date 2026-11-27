@@ -1,0 +1,16 @@
+{
+  "sessions": 200,
+  "seed": 0,
+  "same_candidates": 200,
+  "feature_mismatches": 0,
+  "max_gru_similarity_diff": 0.0,
+  "same_top20": {
+    "clicks": 200,
+    "carts": 200,
+    "orders": 200
+  },
+  "latency_ms": {
+    "median": 14.8,
+    "p95": 15.4
+  }
+}

@@ -1,6 +1,8 @@
-"""Two-stage recommender for a single session: candidates -> features -> rankers -> top 20.
+"""Two-stage recommender for a single session: candidates -> features -> rankers -> top-k lists.
 
-Mirrors src/features.py (Spark) with NumPy/pandas so it can answer in milliseconds.
+Mirrors the v2 system (src/features.py, Spark) with NumPy/pandas so it can answer in
+milliseconds: five candidate sources, 18 features, and one LightGBM ranker per event
+type, each producing its own list. scripts.check_serving compares it with the pipeline.
 """
 import os
 from pathlib import Path
@@ -19,70 +21,77 @@ import lightgbm as lgb  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from src.model import SessionGRU
-from src.retrieval import build_sequences
+from src.model import SessionGRU  # noqa: E402
+from src.ranking import FEATURE_SETS, TARGET_COLS, TYPES  # noqa: E402
+from src.retrieval import build_sequences  # noqa: E402
 
-FEATURES = [
-    "hist_rank", "cov_score", "cov_rank", "pop_rank",
-    "n_clicks", "n_carts", "n_orders",
-    "sess_len", "sess_items",
-    "item_clicks", "item_carts", "item_orders",
-    "secs_since",
-    "gru_rank", "gru_sim", "sim_all",
-]
-TARGETS = ["y_click", "y_cart", "y_order"]
-WEIGHTS = {"y_click": 0.1, "y_cart": 0.3, "y_order": 0.6}
+FEATURES = FEATURE_SETS["v2"]
 N_AIDS = 1_855_603
+GRU_FILE = "gru_test.pt"
+RANKER_FILES = {t: f"ranker_v2_{col}.txt" for t, col in TARGET_COLS.items()}
+
+
+def load_covisit(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """CSR co-visitation table written by scripts.export_serving."""
+    cv = np.load(path)
+    return cv["offsets"], cv["partners"], cv["counts"]
+
+
+def covisit_candidates(
+    table: tuple[np.ndarray, np.ndarray, np.ndarray], hist_aids: np.ndarray, score: str, rank: str, k: int = 20
+) -> pd.DataFrame:
+    """Partners of the history items, summed over the history, top k by score (ties: lower aid first)."""
+    offsets, partners, counts = table
+    spans = [np.arange(offsets[a], offsets[a + 1]) for a in hist_aids]
+    idx = np.concatenate(spans) if spans else np.array([], dtype=np.int64)
+    if len(idx) == 0:
+        return pd.DataFrame({"aid": pd.Series(dtype="int64"), score: pd.Series(dtype="int64"),
+                             rank: pd.Series(dtype="int64")})
+    df = pd.DataFrame({"aid": partners[idx].astype(np.int64), score: counts[idx].astype(np.int64)})
+    df = df.groupby("aid", as_index=False)[score].sum()
+    df = df.sort_values([score, "aid"], ascending=[False, True], kind="stable").head(k)
+    df[rank] = np.arange(1, len(df) + 1)
+    return df
 
 
 class Recommender:
     def __init__(self, artifacts: Path, models: Path, gru_k: int = 40):
-        cv = np.load(artifacts / "covisit.npz")
-        self.cv_offsets, self.cv_partners, self.cv_counts = cv["offsets"], cv["partners"], cv["counts"]
+        self.buys = load_covisit(artifacts / "covisit_buys.npz")
+        self.clicks = load_covisit(artifacts / "covisit_clicks.npz")
         self.item_pop = np.load(artifacts / "item_pop.npy")
         self.popular = np.load(artifacts / "popular.npy")
 
-        self.model = SessionGRU(N_AIDS, dim=64)
-        self.model.load_state_dict(torch.load(models / "session_gru_epoch1.pt", map_location="cpu"))
+        state = torch.load(models / GRU_FILE, map_location="cpu")
+        n_items = state["emb.weight"].shape[0] - 1
+        self.model = SessionGRU(n_items, dim=state["emb.weight"].shape[1])
+        self.model.load_state_dict(state)
         self.model.eval()
         with torch.no_grad():
-            self.item_vecs = self.model.item_vectors()  # (N_AIDS + 1, 64), row 0 = padding
+            self.item_vecs = self.model.item_vectors()  # (n_items + 1, dim), row 0 = padding
 
-        self.boosters = {y: lgb.Booster(model_file=str(models / f"ranker_{y}.txt")) for y in TARGETS}
+        self.boosters = {t: lgb.Booster(model_file=str(models / f)) for t, f in RANKER_FILES.items()}
         self.gru_k = gru_k
 
     # ---------- stage 1: candidates ----------
 
-    def _history(self, ev: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _history(ev: pd.DataFrame) -> pd.DataFrame:
         last = ev.groupby("aid")["ts"].max().reset_index(name="last_ts")
-        last = last.sort_values(["last_ts", "aid"], ascending=[False, True]).head(20)
+        last = last.sort_values(["last_ts", "aid"], ascending=[False, True], kind="stable").head(20)
         last["hist_rank"] = np.arange(1, len(last) + 1)
         return last[["aid", "hist_rank"]]
-
-    def _covisit(self, hist_aids: np.ndarray) -> pd.DataFrame:
-        parts, counts = [], []
-        for a in hist_aids:
-            s, e = self.cv_offsets[a], self.cv_offsets[a + 1]
-            parts.append(self.cv_partners[s:e])
-            counts.append(self.cv_counts[s:e])
-        if not parts or sum(len(p) for p in parts) == 0:
-            return pd.DataFrame({"aid": [], "cov_score": [], "cov_rank": []})
-        df = pd.DataFrame({"aid": np.concatenate(parts), "count": np.concatenate(counts)})
-        df = df.groupby("aid")["count"].sum().reset_index(name="cov_score")
-        df = df.sort_values(["cov_score", "aid"], ascending=[False, True]).head(20)
-        df["cov_rank"] = np.arange(1, len(df) + 1)
-        return df
 
     @torch.no_grad()
     def _gru(self, ev: pd.DataFrame) -> tuple[pd.DataFrame, torch.Tensor]:
         _, seqs = build_sequences(ev.assign(session=0))
         sv = self.model.encode(torch.from_numpy(seqs))[0]
         scores = self.item_vecs @ sv
-        scores[0] = -float("inf")
-        top = scores.topk(self.gru_k)
+        scores[0] = -float("inf")  # never recommend padding
+        k = min(self.gru_k, len(scores) - 1)
+        top = scores.topk(k)
         df = pd.DataFrame({
-            "aid": top.indices.numpy() - 1,
-            "gru_rank": np.arange(1, self.gru_k + 1),
+            "aid": top.indices.numpy().astype(np.int64) - 1,
+            "gru_rank": np.arange(1, k + 1),
             "gru_sim": top.values.numpy(),
         })
         return df, sv
@@ -94,12 +103,14 @@ class Recommender:
         ev = pd.DataFrame(events, columns=["aid", "ts", "type"]).astype("int64")
 
         hist = self._history(ev)
-        cov = self._covisit(hist["aid"].to_numpy())
-        pop = pd.DataFrame({"aid": self.popular, "pop_rank": np.arange(1, len(self.popular) + 1)})
+        hist_aids = hist["aid"].to_numpy()
+        cov = covisit_candidates(self.buys, hist_aids, "cov_score", "cov_rank")
+        clk = covisit_candidates(self.clicks, hist_aids, "clk_score", "clk_rank")
+        pop = pd.DataFrame({"aid": self.popular.astype(np.int64), "pop_rank": np.arange(1, len(self.popular) + 1)})
         gru, sv = self._gru(ev)
 
         cands = hist
-        for part in (cov, pop, gru):
+        for part in (cov, pop, clk, gru):
             cands = cands.merge(part, on="aid", how="outer")
 
         inter = ev.groupby("aid").agg(
@@ -115,22 +126,26 @@ class Recommender:
         cands["secs_since"] = ev["ts"].max() - cands["item_last_ts"]
 
         aids = cands["aid"].to_numpy().astype(np.int64)
-        pop_counts = self.item_pop[aids]
-        cands["item_clicks"], cands["item_carts"], cands["item_orders"] = pop_counts.T
+        cands["item_clicks"], cands["item_carts"], cands["item_orders"] = self.item_pop[aids].T
 
         cands[["n_clicks", "n_carts", "n_orders"]] = cands[["n_clicks", "n_carts", "n_orders"]].fillna(0)
         cands["sim_all"] = (self.item_vecs[aids + 1] @ sv).numpy()
         return cands.drop(columns=["item_last_ts"])
 
-    def recommend(self, events: list[dict], k: int = 20) -> list[int]:
-        """Top-k item IDs for one session. Events: [{"aid", "ts", "type"}, ...]."""
+    def score(self, cands: pd.DataFrame) -> pd.DataFrame:
+        """Add one score column per event type."""
+        for t in TYPES:
+            cands[f"score_{t}"] = self.boosters[t].predict(cands[FEATURES])
+        return cands
+
+    def recommend(self, events: list[dict], k: int = 20) -> dict[str, list[int]]:
+        """Up to k item IDs per event type. Events: [{"aid", "ts", "type"}, ...]."""
         if not events:
-            return [int(a) for a in self.popular[:k]]
-        cands = self.features(events)
-        blend = np.zeros(len(cands))
-        for y in TARGETS:
-            score = self.boosters[y].predict(cands[FEATURES])
-            rank = pd.Series(score).rank(ascending=False, method="first").to_numpy()
-            blend += WEIGHTS[y] / rank
-        order = np.argsort(-blend, kind="stable")[:k]
-        return [int(a) for a in cands["aid"].to_numpy()[order]]
+            fallback = [int(a) for a in self.popular[:k]]
+            return {t: list(fallback) for t in TYPES}
+        cands = self.score(self.features(events))
+        aids = cands["aid"].to_numpy()
+        return {
+            t: [int(a) for a in aids[np.argsort(-cands[f"score_{t}"].to_numpy(), kind="stable")[:k]]]
+            for t in TYPES
+        }

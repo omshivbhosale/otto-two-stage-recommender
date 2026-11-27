@@ -48,8 +48,9 @@ flowchart LR
    in-batch negatives), and last week's popular items.
 2. **Ranking.** Three LightGBM lambdarank models score every candidate for click, cart and order, and each produces
    its own top 20. Time since the shopper last touched an item is the strongest signal.
-3. **Serving.** `src/serve.py` re-implements the feature pipeline in NumPy/pandas for single sessions behind a
-   FastAPI endpoint. It currently serves v1 (four sources, one blended list).
+3. **Serving.** `src/serve.py` re-implements the v2 feature pipeline in NumPy/pandas for single sessions behind a
+   FastAPI endpoint. On 200 real test-week sessions it produced the same candidates, features and top-20 lists
+   as the Spark pipeline for every session, at 15 ms median latency (`scripts/check_serving.py`).
 
 ## Evaluation design (no future data in training)
 
@@ -74,7 +75,7 @@ src/
   serve.py       single-session two-stage pipeline (NumPy/pandas)
   api.py         FastAPI service
 scripts/         one script per pipeline step (see below)
-tests/           pytest tests for split, metrics, baselines, features, model, retrieval, ranking and API
+tests/           pytest tests for split, metrics, baselines, features, model, retrieval, ranking, serving and API
 notebooks/
   01_data_exploration.ipynb   event types, activity, session lengths, item popularity
   02_results.ipynb            tables and charts read from reports/
@@ -109,6 +110,8 @@ and put `otto-recsys-train.jsonl` in `data/raw/`.
 | Rankers | `python -m scripts.train_rankers --version v2` |
 | Compare systems on held-out sessions | `python -m scripts.evaluate_ranking --versions v1 v2 --seed 42` |
 | Score the test week (once) | `python -m scripts.evaluate_ranking --versions v1 v2 --final` |
+| Export the API's lookup tables | `python -m scripts.export_serving` |
+| Check the API code against the pipeline | `python -m scripts.check_serving` |
 
 Then run the two notebooks to see the data and the results.
 
@@ -124,7 +127,13 @@ curl -X POST localhost:8000/recommend \
   -d '{"events": [{"aid": 1517085, "ts": 1659304800, "type": 0}], "k": 20}'
 ```
 
-The response is a list of item IDs plus the request latency in milliseconds.
+The response has one list per event type, best first, plus the request latency:
+
+```json
+{"clicks": [...], "carts": [...], "orders": [...], "latency_ms": ...}
+```
+
+An empty session gets last week's most popular items.
 
 ## Data
 
