@@ -8,7 +8,7 @@ RUN apt-get update \
 WORKDIR /app
 
 # CPU-only PyTorch: the server has no GPU, and the CPU build is far smaller
-RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.15.0
 COPY requirements-serve.txt .
 RUN pip install --no-cache-dir -r requirements-serve.txt
 
